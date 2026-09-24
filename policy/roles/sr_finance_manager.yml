@@ -1,0 +1,32 @@
+role: senior_finance_manager
+version: "1.0"
+
+allowed_tools:
+  - sql
+
+tools:
+  sql:
+    allowed_operations:
+      - SELECT
+      - INSERT
+      - UPDATE
+
+    blocked_patterns:  
+      - "DROP"
+      - "DELETE"
+      - "TRUNCATE"
+      - "ALTER"
+      - "CREATE"
+      - "GRANT"
+      - "REVOKE"
+
+    max_rows: 2000     
+
+    allowed_tables:
+      - ratings
+      - payments
+      - vehicles
+
+    blocked_tables:
+      - users
+      - rides
