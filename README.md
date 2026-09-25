@@ -1,6 +1,6 @@
 <div align="center">
 
-# NL2SQL Policy Enforcer
+# Enterprise Secure Data Access Gateway
 
 **A production-grade, policy-enforced control plane for AI-driven SQL execution.**
 
