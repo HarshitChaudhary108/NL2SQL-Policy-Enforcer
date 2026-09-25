@@ -9,22 +9,36 @@ from utils.database import DatabaseUtil
 from utils.pick_llm import pickllm
 
 from agent.state.agent_state import AgentSchema, GatewaySchema
-from gateway.layer import GATEWAY_LAYER
+from gateway.policy_engine_layer_02 import GATEWAY_LAYER
+from gateway.threat_detector_layer_01 import ThreatDetector
 
 from extract_json import _extract_json
 
 import logging
 logger = logging.getLogger(__name__)
 
-gateway = GATEWAY_LAYER(policy_dir="policy/roles")
+gateway01 = ThreatDetector()
+gateway02 = GATEWAY_LAYER(policy_dir="policy/roles")
 
 def curate_question_node(state: AgentSchema) -> AgentSchema:
     user_question = state["user_question"]
     llm = pickllm("low")
+    threat_detector = gateway01.scan_prompt(user_question)
+    if threat_detector.detected:
+            return {"Threat_Layer_01": threat_detector.detected, "Threat_Type":threat_detector.threat_type}
+    
     response = llm.invoke(f"curate the following question: {user_question}")
     state["curated_ques"] = response.content
-    state["messages"] = [HumanMessage(content=f"{response}")] 
+    state["messages"] = [HumanMessage(content=f"{response}")]
+
     return state
+
+def router_layer_01(state: AgentSchema):
+    threat = state["Threat_Layer_01"]
+    if threat: 
+        return "INVALID"
+    else:
+        return "PASS"
 
 def prompt_query_node(state: AgentSchema) -> AgentSchema:
     curated_question = state["curated_ques"]
@@ -38,18 +52,45 @@ def prompt_query_node(state: AgentSchema) -> AgentSchema:
     db_obj = DatabaseUtil(conn_details)
     schema_info = db_obj.schema_details(schema_name="public")
     prompt = f"""
-    You are an SQL analyst agent. Your task is to convert the user's natural language
-    query into Postgres SQL query that can be executed on the database. You are provided
-    with the user's original query and the schema details of the database, including
-    table names, column names, data types, and sample data for each table so that
-    you can understand the structure of the database and generate an accurate SQL query.
-    Unless user explicitly asks for specific number of rows, always limit the output to 10 rows.
-    Note - Just generate the SQL query without any explanation or additional text because
-    this query will be executed directly on the database. So, the output should be SQL
-    ready to be executed without any modifications.
-
+    You are a PostgreSQL query generator embedded inside an automated pipeline.
+    Your output is passed directly into cursor.execute() by a program — no human
+    reads or edits it first. Anything other than a bare SQL statement will crash
+    the pipeline with a syntax error.
+ 
+    TASK
+    Convert the user's question into exactly one ready-to-run PostgreSQL statement,
+    using the schema details provided below (table names, column names, data types,
+    sample rows). Unless the user explicitly asks for a specific number of rows,
+    limit results to 10 rows.
+ 
+    OUTPUT RULES (violating any of these breaks the pipeline)
+    1. Output the SQL statement and absolutely nothing else.
+    2. Do not wrap it in a code block. Do not use triple backticks anywhere.
+    3. Do not write the word "sql" anywhere in your response.
+    4. Do not add labels, headings, or lead-ins such as "Query:", "Answer:", or
+       "Here is the SQL query:".
+    5. Do not add comments or explanation before or after the statement.
+    6. The first character you output must be the first letter of the SQL
+       keyword itself (S, U, I, D, W, ...). The last character you output must
+       be the statement's closing semicolon. Nothing precedes or follows it —
+       not a space, not a newline, not a period.
+ 
+    --- EXAMPLE 1 ---
+    User's Original Query: show me the 5 most recent completed payments
+    Response (this is the entire, exact response):
+    SELECT * FROM payments WHERE payment_status = 'completed' ORDER BY payment_time DESC LIMIT 5;
+ 
+    --- EXAMPLE 2 ---
+    User's Original Query: mark payment for user 5455 as refunded
+    Response (this is the entire, exact response):
+    UPDATE payments SET payment_status = 'refunded' WHERE user_id = 5455;
+    --- END EXAMPLES ---
+ 
+    Now respond to the request below in exactly the same format as the examples
+    above — the SQL statement alone, nothing before it and nothing after it.
+ 
     User's Original Query: {curated_question}
-
+ 
     Database Schema Details:
     {schema_info}
     """
@@ -93,7 +134,7 @@ def security_gateway(state: AgentSchema):
             "Return a json analysis of this SQL query:\n\n{generated_sql_query}"
         )
     ])
-
+    role = state["role"]
     llm = pickllm(level="hard")
 
     try:
@@ -113,19 +154,19 @@ def security_gateway(state: AgentSchema):
 
     except Exception as e:
         logger.error(f"[gateway] Failed to parse SQL analysis: {e}")
-        # ✅ Fail secure — block execution if query cannot be analyzed
+        #Fail secure — block execution if query cannot be analyzed
         return {
             "gateway_decision": False,
             "gateway_report": f"Security gateway could not analyze SQL query: {e}"
         }
 
-    decision = gateway.evaluate(command=configs.command, tables=configs.tables)
+    decision = gateway02.evaluate(command=configs.command, tables=configs.tables, role=role)
     return {
         "gateway_decision": decision["permitted"],
         "gateway_report": decision["reason"]
     }
 
-def router(state: AgentSchema):
+def router_layer_02(state: AgentSchema):
     decision = state["gateway_decision"]
     if decision:
         return "PASS"
@@ -144,23 +185,36 @@ def execute_sql_query_node(state: AgentSchema) -> AgentSchema:
    
     conn = None
     cursor = None
+    max_rows = 20
     try:
         db_obj = DatabaseUtil(conn_details)
         conn= db_obj.conn
         cursor=conn.cursor(cursor_factory= psycopg2.extras.RealDictCursor)
         cursor.execute(sql_query)
-        result = cursor.fetchall()
-
-        state["sql_execution_result"] = result
-
+        if cursor.description is not None:
+            # SELECT (or anything with a result set, e.g. UPDATE ... RETURNING).
+            # Enforced independently of whatever LIMIT (if any) is inside the
+            # LLM-generated SQL — fetchmany caps what the app pulls off the wire.
+            result = cursor.fetchmany(max_rows)
+            state["sql_execution_result"] = result
+        else:
+            # UPDATE / DELETE / ALTER / etc. have no result set to fetch —
+            # calling fetchmany/fetchall here raises "no results to fetch".
+            # Report rows affected instead, and commit so the write persists
+            # (writes silently roll back on connection close otherwise).
+            rows_affected = cursor.rowcount
+            conn.commit()
+            state["sql_execution_result"] = {"rows_affected": rows_affected}
     except Exception as e:
+        if conn:
+            conn.rollback()
         state["sql_execution_result"] = f"Error occurred while executing SQL query: {e}"
     finally:
         if cursor:
             cursor.close()
         if conn:
             conn.close()
-
+ 
     return state
 
 def represent_final_answer(state: AgentSchema) -> AgentSchema:

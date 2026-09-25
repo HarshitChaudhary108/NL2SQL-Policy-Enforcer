@@ -4,9 +4,12 @@ from pydantic import Field, BaseModel
 from langgraph.graph.message import add_messages
 
 class AgentSchema(TypedDict):
+    role: str = Field(description="the role of the user in the cimpany. E.g: analyst or senior_finance_manager")
     messages: Annotated[list, add_messages] = Field(default_factory=list)
     user_question: str
     curated_ques: str = Field(description="the user's question refined by LLM")
+    Threat_Layer_01: bool = Field(description="if there is any threat in first layer of the security gateway - Prompt Check Layer")
+    Threat_Type: str = Field(description="What kind of threat found in layer 1")
     prompt_query: str  = Field(description="a detailed prompt with SQL DB Context that will help agent to generate SQL Query")
     gateway_decision: bool = Field(description="if the sql query shall execute or not as per safety policy")
     gateway_report: str = Field(description="reason given by the safety gateway for any permitted value either True or False")
