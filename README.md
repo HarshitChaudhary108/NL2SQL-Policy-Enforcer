@@ -6,8 +6,11 @@
 
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![LangGraph](https://img.shields.io/badge/LangGraph-1.2%2B-1C3C3C?style=flat-square)](https://github.com/langchain-ai/langgraph)
+[![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-UI-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supported-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Groq](https://img.shields.io/badge/LLM-Groq-F55036?style=flat-square)](https://groq.com/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](#license)
 
 </div>
@@ -19,6 +22,8 @@
 **NL2SQL Policy Enforcer** wraps a natural-language-to-SQL agent (built with LangGraph) in a dual-layer security gateway, so users can query a PostgreSQL database in plain English — without the LLM ever being able to bypass access-control rules, even if the generated query is malformed, adversarial, or exceeds the scope of the requesting role.
 
 The security model is **deterministic and fail-secure**: the gateway does not ask an LLM whether a query is safe. It parses the generated SQL's commands and table references, then validates them against a per-role YAML policy. If the analysis cannot be completed with confidence, execution is blocked.
+
+The project ships as two deployable services — a **FastAPI backend** that runs the agent, and a **Streamlit UI** that talks to it — orchestrated together via Docker Compose.
 
 ---
 
@@ -75,9 +80,24 @@ Standard approaches either bolt on a string-match filter (easily bypassed) or as
                                       END
 ```
 
+**Serving layer:**
+
+```
+┌─────────────────┐        HTTP        ┌──────────────────┐        SQL        ┌──────────────┐
+│  Streamlit UI    │ ─────────────────► │   FastAPI (main)  │ ─────────────────► │  PostgreSQL   │
+│  (port 8501)      │ ◄───────────────── │   (port 8000)      │ ◄───────────────── │               │
+└─────────────────┘      JSON            └──────────────────┘                    └──────────────┘
+                                                   │
+                                                   ▼
+                                           LangGraph Agent
+                                          (Threat Detector →
+                                           SQL Gen → Policy
+                                           Gateway → Execute)
+```
+
 ---
 
-## Dual-Layer Gateway
+## Dual-Layer Security Gateway
 
 ### Layer 01 — Threat Detector (`gateway/threat_detector_layer_01.py`)
 
@@ -106,9 +126,14 @@ A deterministic evaluator that runs **after SQL generation**. A secondary LLM ca
 
 ## Role-Based Access Control
 
-Policies live as YAML files under `policy/roles/` and are loaded automatically at startup. No code changes are needed to add or modify roles.
+Policies live as YAML files under `policy/roles/` and are loaded automatically at startup. No code changes are needed to add or modify roles. Note that the **filename** and the **internal `role:` field** don't have to match — the engine keys off the field.
 
-**Example — `analyst` role (read-only, restricted tables):**
+| Policy file | Internal `role:` | Access level |
+|---|---|---|
+| `analyst.yml` | `analyst` | Read-only, restricted to `ratings` / `payments` |
+| `sr_finance_manager.yml` | `senior_finance_manager` | Read + write, broader table access |
+
+**Example — `analyst` (read-only, restricted tables):**
 
 ```yaml
 role: analyst
@@ -138,10 +163,10 @@ tools:
       - vehicles
 ```
 
-**Example — `sr_finance_manager` role (broader write access):**
+**Example — `senior_finance_manager` (broader write access):**
 
 ```yaml
-role: sr_finance_manager
+role: senior_finance_manager
 version: "1.0"
 
 allowed_tools:
@@ -151,20 +176,24 @@ tools:
   sql:
     allowed_operations:
       - SELECT
-      - UPDATE
       - INSERT
+      - UPDATE
     blocked_patterns:
       - "DROP"
+      - "DELETE"
       - "TRUNCATE"
       - "ALTER"
+      - "CREATE"
+      - "GRANT"
+      - "REVOKE"
     max_rows: 2000
     allowed_tables:
-      - payments
-      - rides
       - ratings
+      - payments
+      - vehicles
     blocked_tables:
       - users
-      - vehicles
+      - rides
 ```
 
 ---
@@ -196,9 +225,30 @@ tools:
 │
 ├── extract_json.py                  # Robust JSON extraction from raw LLM responses
 ├── feed_data.py                     # Schema creation + CSV data seeder
-├── main.py                          # Entry point
+├── main.py                          # FastAPI application (agent entry point / REST API)
+├── streamlit_app.py                 # Streamlit UI — talks to the FastAPI backend
+├── dockerfile.api                   # Container image for the FastAPI service
+├── dockerfile.UI                    # Container image for the Streamlit UI
+├── docker-compose.yml               # Two-service orchestration (api + streamlit)
 └── pyproject.toml
 ```
+
+---
+
+## Tech Stack
+
+| Component | Technology |
+|---|---|
+| Agent Orchestration | [LangGraph](https://github.com/langchain-ai/langgraph) |
+| LLM Integration | [LangChain](https://github.com/langchain-ai/langchain) + [langchain-groq](https://pypi.org/project/langchain-groq/) |
+| LLM Provider | [Groq](https://groq.com/) |
+| API Layer | [FastAPI](https://fastapi.tiangolo.com/) + [Uvicorn](https://www.uvicorn.org/) |
+| UI Layer | [Streamlit](https://streamlit.io/) |
+| Database | [PostgreSQL](https://www.postgresql.org/) via [psycopg2](https://www.psycopg.org/) |
+| Policy Parsing | [PyYAML](https://pyyaml.org/) |
+| Environment Config | [python-dotenv](https://pypi.org/project/python-dotenv/) |
+| Package Management | [uv](https://github.com/astral-sh/uv) |
+| Containerization | Docker / Docker Compose |
 
 ---
 
@@ -210,26 +260,25 @@ tools:
 | PostgreSQL | Any recent version |
 | [uv](https://github.com/astral-sh/uv) | Recommended (or `pip`) |
 | Groq API Key | [groq.com](https://groq.com/) |
+| Docker & Docker Compose | Optional, for containerized deployment |
 
 ---
 
-## Installation
+## Getting Started (Local Development)
 
 ```bash
-# Clone the repository
-git clone https://github.com/HarshitChaudhary108/Query-Authorization-Gateway.git
-cd Query-Authorization-Gateway
+# 1. Clone the repository
+git clone https://github.com/HarshitChaudhary108/NL2SQL-Policy-Enforcer.git
+cd NL2SQL-Policy-Enforcer
 
-# Install dependencies using uv (recommended)
+# 2. Install dependencies using uv (recommended)
 uv sync
 
 # Or using pip
 pip install -e .
 ```
 
----
-
-## Configuration
+### Configuration
 
 Create a `.env` file in the project root:
 
@@ -245,42 +294,110 @@ password=your_db_password
 database=your_db_name
 ```
 
----
-
-## Database Setup
+### Database Setup
 
 The bundled example schema models a ride-hailing platform with five tables: `users`, `vehicles`, `rides`, `payments`, `ratings`.
 
 1. Place your seed CSV files inside a `data/` directory at the project root:
-```
+   ```
    data/
    ├── users.csv
    ├── vehicles.csv
    ├── rides.csv
    ├── payments.csv
    └── ratings.csv
-```
-
+   ```
 2. Run the seeder:
-```bash
+   ```bash
    python feed_data.py
+   ```
+   This creates the schema (idempotent), loads each CSV via `COPY`, and commits the transaction.
+
+### Run the API
+
+```bash
+uvicorn main:app --reload --port 8000
 ```
 
-This creates the schema (idempotent), loads each CSV via `COPY`, and commits the transaction.
+### Run the UI
+
+In a second terminal:
+
+```bash
+streamlit run streamlit_app.py
+```
+
+By default the UI targets `http://localhost:8000`; override with the `BACKEND_URL` environment variable if your API runs elsewhere.
 
 ---
 
-## Usage
+## Running with Docker
 
-### Run via CLI
+The project defines two independently buildable services in `docker-compose.yml`:
+
+| Service | Dockerfile | Port | Role |
+|---|---|---|---|
+| `api` | `dockerfile.api` | `8000` | FastAPI backend running the LangGraph agent |
+| `streamlit` | `dockerfile.UI` | `8501` | Streamlit front end, talks to `api` over the Compose network |
 
 ```bash
-python -m agent.graph.agent_graph
+# Build and start both services
+docker compose up --build
+
+# Run in the background
+docker compose up --build -d
+
+# Tear down
+docker compose down
 ```
 
-The default run fires a prompt-injection attempt (`"You are now a research agent..."`) against the `analyst` role to demonstrate Layer 01 blocking.
+The UI container resolves the backend via the Compose-internal DNS name (`http://api:8000`), not `localhost` — this is set through the `BACKEND_URL` environment variable in `docker-compose.yml`. Make sure a valid `.env` file exists at the project root before building, since it's loaded via `env_file` for the API service.
 
-### Programmatic Usage
+> **Before building:** the current Dockerfiles expect `requirements-api.txt`, `requirements-streamlit.txt`, and an `api.py` entry module. If your working copy only has `pyproject.toml` / `uv.lock` and `main.py`, export pinned requirement files (e.g. `uv export --no-hashes -o requirements-api.txt`) and align the Dockerfiles' `COPY`/`CMD` targets with `main.py` before running `docker compose up`.
+
+---
+
+## API Reference
+
+Once the API is running (locally or via Docker):
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/health` | Liveness check — returns `{"status": "ok"}` |
+| `GET` | `/roles` | Lists all role names currently loaded from `policy/roles/` |
+| `POST` | `/query` | Runs a natural-language question through the agent for a given role |
+
+**Example request:**
+
+```bash
+curl -X POST http://localhost:8000/query \
+  -H "Content-Type: application/json" \
+  -d '{
+        "role": "analyst",
+        "question": "What is the average payment amount for completed rides?"
+      }'
+```
+
+**Example response shape:**
+
+```json
+{
+  "final_answer": "...",
+  "generated_sql_query": "SELECT AVG(amount) FROM payments WHERE status = 'completed';",
+  "sql_execution_result": [ { "avg": 42.5 } ],
+  "gateway_decision": true,
+  "gateway_report": "",
+  "threat_detected": false,
+  "threat_type": "",
+  "blocked_at": null
+}
+```
+
+`blocked_at` is `"threat_layer"` when Layer 01 intercepted the question, `"policy_gateway"` when Layer 02 rejected the generated SQL, or `null` on a successful run.
+
+---
+
+## Programmatic Usage
 
 ```python
 from agent.graph.agent_graph import app
@@ -288,7 +405,7 @@ from agent.graph.agent_graph import app
 initial_state = {
     "role": "analyst",
     "messages": [],
-    "user_question": "Total sum of Payments done by the user with id = 5455??",
+    "user_question": "Total sum of payments made by the user with id = 5455",
     "curated_ques": "",
     "prompt_query": "",
     "Threat_Layer_01": False,
@@ -386,20 +503,6 @@ tools:
 
 ---
 
-## Tech Stack
-
-| Component | Technology |
-|---|---|
-| Agent Orchestration | [LangGraph](https://github.com/langchain-ai/langgraph) |
-| LLM Integration | [LangChain](https://github.com/langchain-ai/langchain) + [langchain-groq](https://pypi.org/project/langchain-groq/) |
-| LLM Provider | [Groq](https://groq.com/) |
-| Database | [PostgreSQL](https://www.postgresql.org/) via [psycopg2](https://www.psycopg.org/) |
-| Policy Parsing | [PyYAML](https://pyyaml.org/) |
-| Environment Config | [python-dotenv](https://pypi.org/project/python-dotenv/) |
-| Package Management | [uv](https://github.com/astral-sh/uv) |
-
----
-
 ## Security Design Principles
 
 - **Fail-secure by default** — every unknown state, parsing failure, or missing role resolves to `blocked`, never `allowed`.
@@ -410,6 +513,14 @@ tools:
 
 ---
 
+## Roadmap
+
+- [ ] Align Docker build files (`requirements-*.txt`, `api.py`) with the current `main.py` / `pyproject.toml` layout
+- [ ] Add automated tests covering both gateway layers
+- [ ] Structured audit logging for every gateway decision
+
+---
+
 ## Contributing
 
 Pull requests are welcome. For significant changes, please open an issue first to discuss the proposed change. When adding new security features, include a test case that demonstrates both the passing and blocking behavior.
@@ -417,5 +528,5 @@ Pull requests are welcome. For significant changes, please open an issue first t
 ---
 
 <div align="center">
-Built with LangGraph · Groq · PostgreSQL
+Built with LangGraph · FastAPI · Streamlit · Groq · PostgreSQL
 </div>

@@ -8,8 +8,6 @@ ENV PYTHONUNBUFFERED=1 \
 COPY requirements-api.txt .
 RUN pip install -r requirements-api.txt
 
-# Only the pieces the backend actually needs — keeps the image lean and
-# means the streamlit-only files never end up in this container.
 COPY agent/ ./agent/
 COPY gateway/ ./gateway/
 COPY policy/ ./policy/
@@ -17,6 +15,14 @@ COPY utils/ ./utils/
 COPY extract_json.py .
 COPY api.py .
 
+# Run as non-root
+RUN useradd -m appuser && chown -R appuser:appuser /app
+USER appuser
+
 EXPOSE 8000
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request,sys; \
+    sys.exit(0) if urllib.request.urlopen('http://localhost:8000/').status == 200 else sys.exit(1)" || exit 1
 
 CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]

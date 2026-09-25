@@ -13,14 +13,13 @@ services:
   streamlit:
     build:
       context: .
-      dockerfile: Dockerfile.streamlit
-    container_name: nl2sql-streamlit
+      dockerfile: Dockerfile.UI
+    container_name: nl2sql-ui
     environment:
-      # container-to-container DNS name from the "api" service above —
-      # NOT localhost, since these are two separate containers
       - BACKEND_URL=http://api:8000
     ports:
       - "8501:8501"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped

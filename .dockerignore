@@ -1,0 +1,65 @@
+# ---- Version control ----
+.git
+.gitignore
+.github
+
+# ---- Python bytecode & build artifacts ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg
+*.egg-info/
+.eggs/
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- Environment & secrets ----
+.env
+.env.*
+!.env.example
+
+# ---- Package manager artifacts ----
+uv.lock
+.uv-cache/
+
+# ---- IDE / editor ----
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ---- OS cruft ----
+.DS_Store
+Thumbs.db
+
+# ---- App data & logs (seeded at runtime, not baked into the image) ----
+data/
+*.csv
+*.log
+logs/
+
+# ---- Test & lint caches ----
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+tests/
+
+# ---- Docs (not needed inside the runtime image) ----
+README.md
+*.md
+
+# ---- Docker meta files (avoid copying build config into itself) ----
+Dockerfile*
+dockerfile*
+docker-compose*.yml
+.dockerignore

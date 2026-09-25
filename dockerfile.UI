@@ -13,9 +13,13 @@ RUN pip install -r requirements-streamlit.txt
 
 COPY streamlit_app.py .
 
+# Run as non-root
+RUN useradd -m appuser && chown -R appuser:appuser /app
+USER appuser
+
 EXPOSE 8501
 
-# relative to post deployment
+# Relative to post deployment
 HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health || exit 1
 
 CMD ["streamlit", "run", "streamlit_app.py", "--server.address=0.0.0.0", "--server.port=8501"]
