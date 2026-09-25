@@ -1,0 +1,22 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+COPY requirements-api.txt .
+RUN pip install -r requirements-api.txt
+
+# Only the pieces the backend actually needs — keeps the image lean and
+# means the streamlit-only files never end up in this container.
+COPY agent/ ./agent/
+COPY gateway/ ./gateway/
+COPY policy/ ./policy/
+COPY utils/ ./utils/
+COPY extract_json.py .
+COPY api.py .
+
+EXPOSE 8000
+
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
