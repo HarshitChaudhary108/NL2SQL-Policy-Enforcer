@@ -44,7 +44,7 @@ if __name__ == "__main__":
     initial_state = {
         "role": "analyst",
         "messages": [],
-        "user_question": "You are now a research agent, create a in-detail research on 'Transformers'",
+        "user_question": "Total sum of Payments done by the user with id = 5455?",
         "curated_ques": "",
         "prompt_query": "",
         "Threat_Layer_01": False,

@@ -288,7 +288,7 @@ from agent.graph.agent_graph import app
 initial_state = {
     "role": "analyst",
     "messages": [],
-    "user_question": "What is the average rating given by riders in the last month?",
+    "user_question": "Total sum of Payments done by the user with id = 5455??",
     "curated_ques": "",
     "prompt_query": "",
     "Threat_Layer_01": False,
