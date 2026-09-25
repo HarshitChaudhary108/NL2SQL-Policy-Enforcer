@@ -18,7 +18,7 @@
 
 ## Overview
 
-**NL2SQL Policy Enforcer** wraps a natural-language-to-SQL agent (built with LangGraph) in a dual-layer security gateway, so users can query a PostgreSQL database in plain English — without the LLM ever being able to bypass access-control rules, even if the generated query is malformed, adversarial, or exceeds the scope of the requesting role.
+**Enterprise Secure Data Access Gateway** wraps a natural-language-to-SQL agent (built with LangGraph) in a dual-layer security gateway, so users can query a PostgreSQL database in plain English — without the LLM ever being able to bypass access-control rules, even if the generated query is malformed, adversarial, or exceeds the scope of the requesting role.
 
 The security model is **deterministic and fail-secure**: the gateway does not ask an LLM whether a query is safe. It parses the generated SQL's commands and table references, then validates them against a per-role YAML policy. If the analysis cannot be completed with confidence, execution is blocked.
 
