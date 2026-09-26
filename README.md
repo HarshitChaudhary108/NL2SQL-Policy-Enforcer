@@ -426,7 +426,7 @@ Role     : senior_finance_manager
 SQL      : UPDATE payments SET payment_status = 'refunded' WHERE user_id = 5455;
 Decision : PASS
 ```
-
+ 
 ### ❌ Blocked by Layer 01 — prompt injection attempt
 
 ```
