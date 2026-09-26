@@ -96,7 +96,7 @@ Standard approaches either bolt on a string-match filter (easily bypassed) or as
 
 ---
 
-**\*\*Latency Optimization & Prototype Scope\*\***
+## Latency Optimization & Prototype Scope
 
 The current implementation is intentionally scoped as a **\*\*prototype focused on demonstrating the core security control-plane architecture\*\*** rather than covering every possible production optimization.
 
