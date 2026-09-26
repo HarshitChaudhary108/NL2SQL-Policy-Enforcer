@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
-    container_name: nl2sql-api
+    container_name: security-gateway-api
     env_file:
       - .env
     ports:
@@ -14,7 +14,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.UI
-    container_name: nl2sql-ui
+    container_name: security-gateway-ui
     environment:
       - BACKEND_URL=http://api:8000
     ports:

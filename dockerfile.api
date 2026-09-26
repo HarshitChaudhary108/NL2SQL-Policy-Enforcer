@@ -2,27 +2,20 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-ENV PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY requirements-api.txt .
-RUN pip install -r requirements-api.txt
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-COPY agent/ ./agent/
-COPY gateway/ ./gateway/
-COPY policy/ ./policy/
-COPY utils/ ./utils/
+COPY main.py .
 COPY extract_json.py .
-COPY api.py .
-
-# Run as non-root
-RUN useradd -m appuser && chown -R appuser:appuser /app
-USER appuser
+COPY agent/   ./agent/
+COPY gateway/ ./gateway/
+COPY policy/  ./policy/
+COPY utils/   ./utils/
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request,sys; \
-    sys.exit(0) if urllib.request.urlopen('http://localhost:8000/').status == 200 else sys.exit(1)" || exit 1
-
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
