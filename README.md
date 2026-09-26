@@ -267,14 +267,14 @@ tools:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/HarshitChaudhary108/NL2SQL-Policy-Enforcer.git
-cd NL2SQL-Policy-Enforcer
+git clone https://github.com/HarshitChaudhary108/enterprise-secure-data-access-gateway.git
+cd DIR_NAME
 
 # 2. Install dependencies using uv (recommended)
 uv sync
 
 # Or using pip
-pip install -e .
+pip install -r requirements / uv, whatever you prefer!
 ```
 
 ### Configuration
@@ -365,35 +365,6 @@ Once the API is running (locally or via Docker):
 | `GET` | `/health` | Liveness check — returns `{"status": "ok"}` |
 | `GET` | `/roles` | Lists all role names currently loaded from `policy/roles/` |
 | `POST` | `/query` | Runs a natural-language question through the agent for a given role |
-
-**Example request:**
-
-```bash
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{
-        "role": "analyst",
-        "question": "What is the average payment amount for completed rides?"
-      }'
-```
-
-**Example response shape:**
-
-```json
-{
-  "final_answer": "...",
-  "generated_sql_query": "SELECT AVG(amount) FROM payments WHERE status = 'completed';",
-  "sql_execution_result": [ { "avg": 42.5 } ],
-  "gateway_decision": true,
-  "gateway_report": "",
-  "threat_detected": false,
-  "threat_type": "",
-  "blocked_at": null
-}
-```
-
-`blocked_at` is `"threat_layer"` when Layer 01 intercepted the question, `"policy_gateway"` when Layer 02 rejected the generated SQL, or `null` on a successful run.
-
 ---
 
 ## Programmatic Usage
@@ -431,30 +402,29 @@ print(f"Final Answer     : {final_state['final_answer']}")
 ### ✅ Allowed — `analyst` asks a read query on a permitted table
 
 ```
-Question : "What is the average payment amount for completed rides?"
+Question : "total payments done by the user with id 5455."
 Role     : analyst
-SQL      : SELECT AVG(amount) FROM payments WHERE status = 'completed';
+SQL      : SELECT SUM(amount) AS total_payments FROM payments WHERE user_id = 5455;
 Decision : PASS
 ```
 
 ### ❌ Blocked by Layer 02 — `analyst` attempts a write on an allowed table
 
 ```
-Question : "Update the payment status of user 5455 to refunded"
+Question : "Update the payment status of user 5455 to incomplete"
 Role     : analyst
-SQL      : UPDATE payments SET payment_status = 'refunded' WHERE user_id = 5455;
+SQL      : UPDATE payments SET payment_status = 'incomplete' WHERE user_id = 5455;
 Decision : INVALID
 Report   : Command 'UPDATE' is explicitly blocked for role 'analyst'
 ```
 
-### ❌ Blocked by Layer 02 — `analyst` queries a blocked table
+### ✅ Allowed — `senior_finance_manager` asks a perform update in database
 
 ```
-Question : "Show me all users who signed up last week"
-Role     : analyst
-SQL      : SELECT * FROM users WHERE created_at >= NOW() - INTERVAL '7 days';
-Decision : INVALID
-Report   : Table 'users' is explicitly blocked for role 'analyst'
+Question : "update the payment status to "refunded" of all the payments done by the user with id 5455."
+Role     : senior_finance_manager
+SQL      : UPDATE payments SET payment_status = 'refunded' WHERE user_id = 5455;
+Decision : PASS
 ```
 
 ### ❌ Blocked by Layer 01 — prompt injection attempt
