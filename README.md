@@ -96,6 +96,24 @@ Standard approaches either bolt on a string-match filter (easily bypassed) or as
 
 ---
 
+**\*\*Latency Optimization & Prototype Scope\*\***
+
+The current implementation is intentionally scoped as a **\*\*prototype focused on demonstrating the core security control-plane architecture\*\*** rather than covering every possible production optimization.
+
+Because the request flow can involve multiple LLM operations — including SQL generation, policy-analysis extraction, and final answer formatting — **LLM latency can become an important part of end-to-end response time**.
+
+Potential optimizations for reducing latency include:
+
+- **Choose a faster LLM API** — evaluate and switch to a lower-latency model/provider where the quality and reliability requirements of each gateway stage allow it.
+
+- **Perform Prompt Caching** — cache stable prompt components such as system instructions, schema context, and policy-related context to reduce repeated processing for requests with common prompt prefixes.
+
+The current prototype intentionally does not include every possible gateway capability. There are many additional opportunities to enhance it for production environments, such as stronger SQL parsing and validation, structured audit logging, schema metadata caching, connection pooling, rate limiting, finer-grained authorization, query cost controls, observability, automated security testing, and more advanced policy enforcement.
+
+These are **\*\*future enhancement opportunities rather than implemented features in the current prototype\*\***. The present version prioritizes demonstrating the core principle: **AI-generated database operations should pass through a deterministic, policy-enforced security boundary before execution.**
+
+---
+
 ## Dual-Layer Security Gateway
 
 ### Layer 01 — Threat Detector (`gateway/threat_detector_layer_01.py`)
@@ -291,6 +309,13 @@ port=5432
 user=your_db_user
 password=your_db_password
 database=your_db_name
+
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_ENDPOINT= 'LINK'
+LANGCHAIN_API_KEY= 'YOUR_API_KEY'
+LANGCHAIN_PROJECT='secure-enterprise-agent'
+
+BACKEND_URL= "http://localhost:8000"
 ```
 
 ### Database Setup
