@@ -1,22 +1,4 @@
-"""
-Enterprise Secure Data Access Gateway — Streamlit Console
-===========================================================
 
-Front end for the dual-layer secured NL2SQL agent. This file talks to the
-FastAPI backend's `/health`, `/roles` and `/query` endpoints and renders the
-result as a stage-by-stage trace so a user can see exactly how their question
-performed at every step of the pipeline — most importantly at the two
-security layers:
-
-    Layer 01 · Threat Detector   — regex prompt-injection firewall
-    Layer 02 · Policy Gateway    — deterministic YAML role/policy engine
-
-The backend location is read from the `BACKEND_URL` environment variable and
-is used only internally to make requests — it is never rendered in the UI.
-
-Run with:
-    streamlit run streamlit_app.py
-"""
 
 from __future__ import annotations
 
@@ -46,7 +28,8 @@ except ImportError:                                    # pragma: no cover
 # Configuration — internal only, never surfaced in the UI
 # ---------------------------------------------------------------------------
 
-BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000").rstrip("/")
+
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://34.228.41.228:8000").rstrip("/")
 REQUEST_TIMEOUT = 90
 HEALTH_TIMEOUT = 3
 POLICY_DIR = Path(__file__).resolve().parent / "policy" / "roles"
